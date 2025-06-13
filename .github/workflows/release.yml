@@ -1,0 +1,62 @@
+name: Release Binaries
+
+on:
+  push:
+    tags:
+      - 'v*'  # 触发条件：例如 v1.0.0
+
+jobs:
+  build:
+    name: Build binaries for ${{ matrix.goos }} / ${{ matrix.goarch }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64  # 跳过不常用组合
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24.3'  # 根据你的项目选择 Go 版本
+
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          mkdir -p dist
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          output="yourcli-${GOOS}-${GOARCH}${ext}"
+          go build -o dist/$output .
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: yourcli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+  
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./dist
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ./dist/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
