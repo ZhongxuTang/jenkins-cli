@@ -54,6 +54,10 @@ jobs:
         with:
           path: ./dist
 
+      - name: Debug whoami
+        run: |
+          curl -H "Authorization: token $GITHUB_TOKEN" https://api.github.com/user
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
