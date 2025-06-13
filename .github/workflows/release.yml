@@ -1,3 +1,6 @@
+permissions:
+  contents: write  # 允许创建 release、上传 assets
+
 name: Release Binaries
 
 on:
