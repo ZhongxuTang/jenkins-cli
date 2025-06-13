@@ -1,0 +1,8 @@
+# Ignore build outputs
+*.exe
+*.out
+*.test
+*.a
+
+# Ignore compiled binaries
+/bin/
