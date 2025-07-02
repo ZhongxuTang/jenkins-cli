@@ -37,19 +37,22 @@ func init() {
 }
 
 func printLogLine(logText string, delay time.Duration) {
-	lines := strings.Split(logText, "\n")
-	for _, line := range lines {
-		switch {
-		case strings.Contains(line, "INFO"):
-			color.White(line)
-		case strings.Contains(line, "WARN"):
-			color.Yellow(line)
-		case strings.Contains(line, "ERROR"):
-			color.Red(line)
-		default:
-			color.White(line)
+	if logText != "" {
+		lines := strings.Split(logText, "\n")
+		for _, line := range lines {
+			switch {
+			case strings.Contains(line, "INFO"):
+				color.White(line)
+			case strings.Contains(line, "WARN"):
+				color.Yellow(line)
+			case strings.Contains(line, "ERROR"):
+				color.Red(line)
+			default:
+				color.White(line)
+			}
+			time.Sleep(delay)
 		}
-		time.Sleep(delay)
+		color.Unset()
+
 	}
-	color.Unset()
 }

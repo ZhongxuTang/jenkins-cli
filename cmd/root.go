@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"time"
 
@@ -51,7 +50,6 @@ func baseSelect(label string, items []string) string {
 		//color.Red("No items to select")
 		return ""
 	}
-	fmt.Println(items)
 	selectPrompt := promptui.Select{
 		Label: label,
 		Items: items,
@@ -59,9 +57,8 @@ func baseSelect(label string, items []string) string {
 	}
 	_, result, err := selectPrompt.Run()
 	if err != nil {
-		color.White("failed to select", err)
+		color.White("failed to select")
 	}
-	fmt.Println(result)
 	return result
 }
 
