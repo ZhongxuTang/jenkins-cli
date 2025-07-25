@@ -3,6 +3,7 @@ module github.com/lemonsoul/jenkins-cli
 go 1.24.3
 
 require (
+	github.com/briandowns/spinner v1.23.2
 	github.com/fatih/color v1.18.0
 	github.com/manifoldco/promptui v0.9.0
 	github.com/schollz/progressbar/v3 v3.18.0

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -27,10 +28,22 @@ var initCmd = &cobra.Command{
 				color.White("failed to create config file")
 			}
 
+			var (
+				username string
+				token    string
+				baseApi  string
+			)
+			color.White("plase config jenkuins username:")
+			fmt.Scanln(&username)
+			color.White("plase config jenkuins token:")
+			fmt.Scanln(&token)
+			color.White("plase config jenkuins base api url:")
+			fmt.Scanln(&baseApi)
+
 			config := config.JenkinsConfig{
-				Username: "",
-				Token:    "",
-				BaseApi:  "",
+				Username: username,
+				Token:    token,
+				BaseApi:  baseApi,
 			}
 			data, _ := yaml.Marshal(&config)
 			if err := os.WriteFile(base_config_dir, data, 0644); err != nil {

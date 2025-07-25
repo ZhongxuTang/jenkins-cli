@@ -10,24 +10,39 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/config"
 	"github.com/lemonsoul/jenkins-cli/util"
 	"github.com/tidwall/gjson"
 )
 
-func base_req(api string) ([]byte, *http.Header) {
+func buildRequest(req *http.Request) {
 	cfg := util.GetConfigFile()
-	req, _ := http.NewRequest("GET", cfg.BaseApi+api, nil)
 	auth := cfg.Username + ":" + cfg.Token
 	encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
 	req.Header.Add("Authorization", "Basic "+encodedAuth)
-	response, _ := http.DefaultClient.Do(req)
-	resBody, _ := io.ReadAll(response.Body)
-	return resBody, &response.Header
+}
+
+func baseReq(api string) ([]byte, int, *http.Header) {
+	cfg := util.GetConfigFile()
+	req, _ := http.NewRequest("GET", cfg.BaseApi+api, nil)
+	buildRequest(req)
+
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		color.Red("request failed", err)
+		return make([]byte, 0), -1, nil
+	}
+	resBody, ioErr := io.ReadAll(response.Body)
+	if ioErr != nil {
+		color.Red("io error", ioErr)
+	}
+
+	return resBody, response.StatusCode, &response.Header
 }
 
 func GetViews() []string {
-	resBody, _ := base_req("/api/json")
+	resBody, _, _ := baseReq("/api/json")
 	viewNames := gjson.Get(string(resBody), "views.#.name")
 	viewRes := make([]string, 0)
 	for _, viewName := range viewNames.Array() {
@@ -37,7 +52,7 @@ func GetViews() []string {
 }
 
 func GetViewJob(username string, token string, baseApi string, viewName string) []string {
-	resBody, _ := base_req("/view/" + viewName + "/api/json")
+	resBody, _, _ := baseReq("/view/" + viewName + "/api/json")
 	jobNames := gjson.Get(string(resBody), "jobs.#.name")
 	jobRes := make([]string, 0)
 	for _, jobName := range jobNames.Array() {
@@ -47,7 +62,7 @@ func GetViewJob(username string, token string, baseApi string, viewName string) 
 }
 
 func GetJobPararm(jobName string) ([]string, []string) {
-	resBody, _ := base_req("/job/" + jobName + "/api/json")
+	resBody, _, _ := baseReq("/job/" + jobName + "/api/json")
 	parameterDefinitions := gjson.Get(string(resBody), `property.#(_class=="hudson.model.ParametersDefinitionProperty").parameterDefinitions`)
 	choices := gjson.Get(parameterDefinitions.Raw, "#(_class==\"hudson.model.ChoiceParameterDefinition\").choices")
 	choicesArray := make([]string, 0)
@@ -64,7 +79,7 @@ func GetJobPararm(jobName string) ([]string, []string) {
 }
 
 func GetCrumb() (string, string) {
-	resBody, _ := base_req("/crumbIssuer/api/json")
+	resBody, _, _ := baseReq("/crumbIssuer/api/json")
 	resutArray := gjson.GetMany(string(resBody), "crumbRequestField", "crumb")
 	return resutArray[0].String(), resutArray[1].String()
 }
@@ -90,7 +105,7 @@ func BuildWithParameters(jobName string, choices string, branch string) string {
 	req.Header.Add(crumbRequestField, crumb)
 
 	response, _ := http.DefaultClient.Do(req)
-	//resBody, _ := io.ReadAll(response.Body)
+	//resBody,_,_ := io.ReadAll(response.Body)
 	if response.StatusCode == 201 {
 		location := response.Header.Get("Location")
 		u, err := url.Parse(location)
@@ -105,18 +120,18 @@ func BuildWithParameters(jobName string, choices string, branch string) string {
 }
 
 func GetBuildNumber(queueId string) string {
-	resBody, _ := base_req("/queue/item/" + queueId + "/api/json")
+	resBody, _, _ := baseReq("/queue/item/" + queueId + "/api/json")
 	return gjson.Get(string(resBody), "executable.number").String()
 }
 
 func GetBuildLog(jobName string, buildNumber string) string {
-	resBody, _ := base_req("/job/" + jobName + "/" + buildNumber + "/logText/progressiveText/api/json")
+	resBody, _, _ := baseReq("/job/" + jobName + "/" + buildNumber + "/logText/progressiveText/api/json")
 	log := gjson.Get(string(resBody), "log").String()
 	return log
 }
 
 func GetQueue() []config.Queue {
-	resBody, _ := base_req("/queue/api/json")
+	resBody, _, _ := baseReq("/queue/api/json")
 	items := gjson.Get(string(resBody), "items")
 
 	queueArray := make([]config.Queue, 0)
@@ -135,7 +150,7 @@ func GetQueue() []config.Queue {
 }
 
 func GetComputer() []config.Computer {
-	resBody, _ := base_req("/computer/api/json?depth=1")
+	resBody, _, _ := baseReq("/computer/api/json?depth=1")
 	computerArray := make([]config.Computer, 0)
 
 	computers := gjson.Get(string(resBody), "computer")
@@ -161,7 +176,7 @@ func GetComputer() []config.Computer {
 }
 
 func GetBuildStatus(jobName string, buildNumber string) config.BuildStatus {
-	resBody, _ := base_req("/job/" + jobName + "/" + buildNumber + "/api/json")
+	resBody, _, _ := baseReq("/job/" + jobName + "/" + buildNumber + "/api/json")
 	res := gjson.GetMany(string(resBody), "queueId", "number", "building", "duration", "fullDisplayName")
 	return config.BuildStatus{
 		QueueId:         res[0].String(),
@@ -177,30 +192,32 @@ func GetTextLog(jobName string, buildNumber string, start *int) (string, bool, i
 	if start != nil {
 		reqUrl = reqUrl + "?start=" + strconv.Itoa(*start)
 	}
-	resBody, resHeader := base_req(reqUrl)
+	resBody, _, resHeader := baseReq(reqUrl)
 	logText := string(resBody)
 	moreDate := false
 	textSize := int(-1)
-	moreDateTemp := resHeader.Get("X-More-Data")
-	textSizetemp := resHeader.Get("X-Text-Size")
-	if moreDateTemp != "" {
-		parsed, err := strconv.ParseBool(moreDateTemp)
-		if err == nil {
-			moreDate = parsed
+	if resHeader != nil {
+		moreDateTemp := resHeader.Get("X-More-Data")
+		textSizetemp := resHeader.Get("X-Text-Size")
+		if moreDateTemp != "" {
+			parsed, err := strconv.ParseBool(moreDateTemp)
+			if err == nil {
+				moreDate = parsed
+			}
 		}
-	}
-	if textSizetemp != "" {
-		parsed, err := strconv.ParseInt(textSizetemp, 10, 64)
-		if err == nil {
-			textSize = int(parsed)
+		if textSizetemp != "" {
+			parsed, err := strconv.ParseInt(textSizetemp, 10, 64)
+			if err == nil {
+				textSize = int(parsed)
+			}
 		}
+
 	}
 	return logText, moreDate, textSize
-
 }
 
 func GetPipelineConfig(jobName string) config.PipelineConfig {
-	resBody, _ := base_req("/job/" + jobName + "/wfapi/runs")
+	resBody, _, _ := baseReq("/job/" + jobName + "/wfapi/runs")
 	res := gjson.GetMany(string(resBody), "id", "status", "startTimeMillis", "endTimeMillis", "durationMillis", "stages")
 	stages := make([]config.Stage, 0)
 	for _, stage := range res[5].Array() {
@@ -219,7 +236,7 @@ func GetPipelineConfig(jobName string) config.PipelineConfig {
 }
 
 func GetWFDescribe(jobName string, buildNumber string) config.WFDescribe {
-	resBody, _ := base_req("/job/" + jobName + "/" + buildNumber + "/wfapi/describe")
+	resBody, _, _ := baseReq("/job/" + jobName + "/" + buildNumber + "/wfapi/describe")
 	res := gjson.GetMany(string(resBody), "id", "status", "startTimeMillis", "endTimeMillis", "durationMillis", "stages")
 	stages := make([]config.Stage, 0)
 	for _, stage := range res[5].Array() {
@@ -240,4 +257,32 @@ func GetWFDescribe(jobName string, buildNumber string) config.WFDescribe {
 		DurationMillis:  res[4].Int(),
 		Stages:          stages,
 	}
+}
+
+func Stop(jobName string, buildNumber string) bool {
+	cfg := util.GetConfigFile()
+	req, _ := http.NewRequest("POST", cfg.BaseApi+"/job/"+jobName+"/"+buildNumber+"/stop", nil)
+	buildRequest(req)
+	http.DefaultClient.Do(req)
+
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		color.Red("request failed", err)
+		return false
+	}
+	if response.StatusCode == 200 || response.StatusCode == 302 {
+		return true
+	}
+	return false
+}
+
+func CancleItem(queueId string) bool {
+	if queueId == "" {
+		return false
+	}
+	_, statusCode, _ := baseReq("/queue/cancelItem?id=" + queueId)
+	if statusCode == 200 || statusCode == 302 {
+		return true
+	}
+	return false
 }

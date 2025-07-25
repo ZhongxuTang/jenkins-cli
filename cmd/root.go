@@ -4,11 +4,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/api"
 	"github.com/lemonsoul/jenkins-cli/config"
 	"github.com/lemonsoul/jenkins-cli/util"
-	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
 
@@ -22,8 +22,8 @@ var rootCmd = &cobra.Command{
 		selectJob := selectJob(cfg, selectView)
 		choices, branchs := api.GetJobPararm(selectJob)
 
-		choicesSelect := baseSelect("Select Choices", choices)
-		branchsSelect := baseSelect("Select Branch", branchs)
+		choicesSelect := util.StrUISelect("Select Choices", choices)
+		branchsSelect := util.StrUISelect("Select Branch", branchs)
 
 		if selectView == "" || selectJob == "" || branchsSelect == "" {
 			color.White("🚨 Selection incomplete, please try again.")
@@ -34,7 +34,10 @@ var rootCmd = &cobra.Command{
 		if queueId != "" {
 			color.White("🎉 Build " + selectJob + choicesSelect + branchsSelect + " success, queue id is " + queueId)
 		}
-		time.Sleep(5 * time.Second)
+		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+		s.Start()
+		time.Sleep(4 * time.Second)
+		s.Stop()
 		buildNumber := api.GetBuildNumber(queueId)
 		if buildNumber == "" {
 			color.White("♻️ job mabe waiting to run, please check it later")
@@ -45,30 +48,13 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func baseSelect(label string, items []string) string {
-	if len(items) == 0 {
-		//color.Red("No items to select")
-		return ""
-	}
-	selectPrompt := promptui.Select{
-		Label: label,
-		Items: items,
-		Size:  10,
-	}
-	_, result, err := selectPrompt.Run()
-	if err != nil {
-		color.White("failed to select")
-	}
-	return result
-}
-
 func selectView(cfg config.JenkinsConfig) string {
 	viewNames := make([]string, 0)
 	for _, item := range cfg.Views {
 		viewNames = append(viewNames, item.Name)
 	}
 	//viewNames = append(viewNames, "return")
-	return baseSelect("Select View", viewNames)
+	return util.StrUISelect("Select View", viewNames)
 }
 
 func selectJob(cfg config.JenkinsConfig, viewResult string) string {
@@ -81,7 +67,7 @@ func selectJob(cfg config.JenkinsConfig, viewResult string) string {
 			break
 		}
 	}
-	return baseSelect("Select Job", jobNames)
+	return util.StrUISelect("Select Job", jobNames)
 }
 
 func Execute() {
