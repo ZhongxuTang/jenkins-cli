@@ -2,9 +2,8 @@ name: Release Binaries
 
 on:
   push:
-    tags:
-      - 'v*'  # 触发条件：例如 v1.0.0
-
+    branches:
+      - main
 jobs:
   build:
     name: Build binaries for ${{ matrix.goos }} / ${{ matrix.goarch }}
