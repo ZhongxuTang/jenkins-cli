@@ -2,8 +2,8 @@ name: Release Binaries
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
 jobs:
   build:
     name: Build binaries for ${{ matrix.goos }} / ${{ matrix.goarch }}
