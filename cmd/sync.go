@@ -16,14 +16,15 @@ var syncCmd = &cobra.Command{
 	Short: "sync config",
 	Long:  `sync jenkins data to config file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		cfg := util.GetConfigFile()
+		baseConfig := util.GetConfigFile()
+		cfg := util.GetWprkspaceFile()
 		viewNames := api.GetViews()
 		for _, viewName := range viewNames {
 			view := config.View{}
 			view.Name = viewName
 			view.Job = make([]config.Job, 0)
 
-			jobNames := api.GetViewJob(cfg.Username, cfg.Token, cfg.BaseApi, viewName)
+			jobNames := api.GetViewJob(baseConfig.Username, baseConfig.Token, baseConfig.BaseApi, viewName)
 			for _, jobName := range jobNames {
 				//api.GetJobPararm(cfg.Username, cfg.Token, cfg.BaseApi, jobName)
 				view.Job = append(view.Job, config.Job{Name: jobName, JobParam: config.JobParam{}})
@@ -37,7 +38,7 @@ var syncCmd = &cobra.Command{
 			return
 		}
 		// Write the updated config back to the file
-		err = os.WriteFile(util.GetConfigFilePath(), data, 0644)
+		err = os.WriteFile(util.GetWorkspaceFilePath(), data, 0644)
 		if err != nil {
 			color.White("failed to write config file", err)
 			return

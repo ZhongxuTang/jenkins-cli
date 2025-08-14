@@ -23,11 +23,17 @@ var logCmd = &cobra.Command{
 		var moreDate bool
 		var textSize int
 		logText, moreDate, textSize = api.GetTextLog(args[0], args[1], nil)
-		printLogLine(logText, 20*time.Millisecond)
-		for moreDate {
-			//time.Sleep(500 * time.Millisecond)
-			logText, moreDate, textSize = api.GetTextLog(args[0], args[1], &textSize)
-			printLogLine(logText, 20*time.Millisecond)
+		if textSize == -1 || !moreDate {
+			// log complate
+			color.White("Log output is completed!")
+		} else {
+			//printLogLine(logText, 20*time.Millisecond)
+			for moreDate {
+				//time.Sleep(500 * time.Millisecond)
+				logText, moreDate, textSize = api.GetTextLog(args[0], args[1], &textSize)
+				printLogLine(logText, 20*time.Millisecond)
+			}
+
 		}
 	},
 }

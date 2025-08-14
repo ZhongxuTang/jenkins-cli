@@ -38,7 +38,7 @@ func QueueUISelect(label string, items []QueueSelctItem) int {
 	}
 	index, _, err := selectPrompt.Run()
 	if err != nil {
-		color.White("failed to select")
+		color.Yellow("failed to select")
 		return -1
 	}
 	return index
@@ -58,7 +58,7 @@ func StrUISelect(label string, itemStrs []string) string {
 		Label:    "{{ . }}?",
 		Active:   "\U0001F34B {{ .Name | cyan }}",
 		Inactive: "  {{ .Name | cyan }}",
-		Selected: "\u2714 {{ .Name | white | cyan }}",
+		Selected: "\u2714 {{ .Name | cyan }}",
 		Details: `
 --------- Pepper ----------
 {{ "Name:" | faint }}	{{ .Name }}`,
@@ -72,7 +72,7 @@ func StrUISelect(label string, itemStrs []string) string {
 	}
 	index, _, err := selectPrompt.Run()
 	if err != nil {
-		color.White("failed to select")
+		color.Yellow("failed to select")
 		return ""
 	}
 	return itemStrs[index]

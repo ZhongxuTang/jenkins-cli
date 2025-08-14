@@ -1,14 +1,19 @@
 package config
 
 const BASE_NAME = "jenkins-cli"
+const WORKSPACE_INFO = "workspace"
 
 const BASE_CONFIG_DIR = "/.config/" + BASE_NAME + "/" + BASE_NAME + ".yaml"
+const WORKSPACE_INFO_DIR = "/.config/" + BASE_NAME + "/" + WORKSPACE_INFO + ".yaml"
 
 type JenkinsConfig struct {
 	Username string `yaml:"username"`
 	Token    string `yaml:"token"`
 	BaseApi  string `yaml:"base_api"`
-	Views    []View `yaml:"views"`
+}
+
+type Workspace struct {
+	Views []View `yaml:"views"`
 }
 
 type View struct {

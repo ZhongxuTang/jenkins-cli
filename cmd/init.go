@@ -16,45 +16,51 @@ var initCmd = &cobra.Command{
 	Short: "init config",
 	Long:  `init config for jenkins-cli`,
 	Run: func(cmd *cobra.Command, args []string) {
-		base_config_dir := os.Getenv("HOME") + config.BASE_CONFIG_DIR
-		if _, err := os.Stat(base_config_dir); err == nil {
-			color.White("config file already exists")
-		} else {
-			if err := os.MkdirAll(filepath.Dir(base_config_dir), os.ModePerm); err != nil {
-				color.White("failed to create config dir", err)
-				return
-			}
-			if _, err := os.Create(base_config_dir); err != nil {
-				color.White("failed to create config file")
-			}
+		baseConfigDir, _ := createFile(config.BASE_CONFIG_DIR)
+		createFile(config.WORKSPACE_INFO_DIR)
+		var (
+			username string
+			token    string
+			baseApi  string
+		)
+		color.Yellow("plase config jenkuins username:")
+		fmt.Scanln(&username)
+		color.Yellow("plase config jenkuins token:")
+		fmt.Scanln(&token)
+		color.Yellow("plase config jenkuins base api url:")
+		fmt.Scanln(&baseApi)
 
-			var (
-				username string
-				token    string
-				baseApi  string
-			)
-			color.White("plase config jenkuins username:")
-			fmt.Scanln(&username)
-			color.White("plase config jenkuins token:")
-			fmt.Scanln(&token)
-			color.White("plase config jenkuins base api url:")
-			fmt.Scanln(&baseApi)
-
-			config := config.JenkinsConfig{
-				Username: username,
-				Token:    token,
-				BaseApi:  baseApi,
-			}
-			data, _ := yaml.Marshal(&config)
-			if err := os.WriteFile(base_config_dir, data, 0644); err != nil {
-				color.White("failed to write config file", err)
-				return
-			}
-
+		config := config.JenkinsConfig{
+			Username: username,
+			Token:    token,
+			BaseApi:  baseApi,
 		}
+		data, _ := yaml.Marshal(&config)
+		if err := os.WriteFile(baseConfigDir, data, 0644); err != nil {
+			color.Red("failed to write config file", err)
+			return
+		}
+
 	},
 }
 
 func init() {
 	rootCmd.AddCommand(initCmd)
+}
+
+func createFile(path string) (dir string, err error) {
+	fileDir := os.Getenv("HOME") + path
+	if _, err := os.Stat(fileDir); err == nil {
+		color.Yellow("config file already exists")
+	} else {
+		if err := os.MkdirAll(filepath.Dir(fileDir), os.ModePerm); err != nil {
+			color.Red("failed to create config dir", err)
+			return "", err
+		}
+		if _, err := os.Create(fileDir); err != nil {
+			color.Red("failed to create config file")
+			return "", err
+		}
+	}
+	return fileDir, nil
 }

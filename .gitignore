@@ -6,3 +6,4 @@
 
 # Ignore compiled binaries
 /bin/
+/.vscode/

@@ -11,14 +11,33 @@ func GetConfigFilePath() string {
 	return os.Getenv("HOME") + config.BASE_CONFIG_DIR
 }
 
-func GetConfigFile() config.JenkinsConfig {
-	base_config_dir := GetConfigFilePath()
+func GetWorkspaceFilePath() string {
+	return os.Getenv("HOME") + config.WORKSPACE_INFO_DIR
+}
 
-	config_file, err := os.ReadFile(base_config_dir)
+func GetConfigFile() config.JenkinsConfig {
+	baseConfigDir := GetConfigFilePath()
+
+	configFile, err := os.ReadFile(baseConfigDir)
 	if err != nil {
 		panic("failed to read config file")
 	}
 	var cfg config.JenkinsConfig
+	err = yaml.Unmarshal(configFile, &cfg)
+	if err != nil {
+		panic("failed to unmarshal config file")
+	}
+	return cfg
+}
+
+func GetWprkspaceFile() config.Workspace {
+	workspaceInfoDir := GetWorkspaceFilePath()
+
+	config_file, err := os.ReadFile(workspaceInfoDir)
+	if err != nil {
+		panic("failed to read config file")
+	}
+	var cfg config.Workspace
 	err = yaml.Unmarshal(config_file, &cfg)
 	if err != nil {
 		panic("failed to unmarshal config file")
