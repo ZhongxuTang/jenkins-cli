@@ -54,7 +54,7 @@ jobs:
           path: ./dist
       - name: Get version from tag
         id: version
-        run: echo "$(git describe --tags --match 'v*' --abbrev=0)" >> $GITHUB_OUTPUT
+        run: echo "VERSION=$(git describe --tags --match 'v*' --abbrev=0)" >> $GITHUB_OUTPUT
 
       - name: Debug whoami
         run: |
@@ -64,6 +64,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: ./dist/**/*
-          tag_name: ${{ steps.version.outputs }}
+          tag_name: ${{ steps.version.outputs.VERSION  }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
