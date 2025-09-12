@@ -33,14 +33,14 @@ jobs:
           mkdir -p dist
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
-          output="jcli-${GOOS}-${GOARCH}${ext}"
-          go build -gcflags="all=N -l" -o dist/$output .
+          go build -ldflags="-s -w" -o "jcli${ext}" .
+          zip "dist/jcli-${GOOS}-${GOARCH}.zip" "jcli${ext}"
 
       - name: Upload binary
         uses: actions/upload-artifact@v4
         with:
-          name: yourcli-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: dist/*
+          name: jcli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.zip*
   
   release:
     name: Create GitHub Release
