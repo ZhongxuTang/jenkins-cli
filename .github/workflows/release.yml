@@ -63,7 +63,7 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: ./dist/**/*
+          files: ./dist/**/*.zip
           tag_name: ${{ steps.version.outputs.VERSION  }}
         env:
           GITHUB_TOKEN: ${{ secrets.GH_PAT }}
