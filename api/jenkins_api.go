@@ -29,13 +29,25 @@ func buildRequest(req *http.Request) error {
 	return nil
 }
 
-func baseReq(api string) ([]byte, int, *http.Header, error) {
+func baseReq(api string, params map[string]string) ([]byte, int, http.Header, error) {
 	cfg, err := util.GetConfigFile()
 	if err != nil {
 		return nil, -1, nil, err
 	}
 
-	req, err := http.NewRequest("GET", cfg.BaseApi+api, nil)
+	apiUrl, _ := url.JoinPath(cfg.BaseApi, api)
+
+	urlParams := url.Values{}
+
+	if len(params) > 0 {
+		for key, value := range params {
+			urlParams.Set(key, value)
+		}
+	}
+
+	fullUrl, _ := url.Parse(apiUrl + "?" + urlParams.Encode())
+
+	req, err := http.NewRequest("GET", fullUrl.String(), nil)
 	if err != nil {
 		return nil, -1, nil, fmt.Errorf("failed to create request: %w", err)
 	}
@@ -53,14 +65,14 @@ func baseReq(api string) ([]byte, int, *http.Header, error) {
 	resBody, ioErr := io.ReadAll(response.Body)
 	if ioErr != nil {
 		color.Red("io error: %v", ioErr)
-		return nil, response.StatusCode, &response.Header, fmt.Errorf("failed to read response: %w", ioErr)
+		return nil, response.StatusCode, response.Header, fmt.Errorf("failed to read response: %w", ioErr)
 	}
 
-	return resBody, response.StatusCode, &response.Header, nil
+	return resBody, response.StatusCode, response.Header, nil
 }
 
 func GetViews() ([]string, error) {
-	resBody, _, _, err := baseReq("/api/json")
+	resBody, _, _, err := baseReq("/api/json", make(map[string]string))
 	if err != nil {
 		return nil, err
 	}
@@ -72,8 +84,8 @@ func GetViews() ([]string, error) {
 	return viewRes, nil
 }
 
-func GetViewJob(username string, token string, baseApi string, viewName string) ([]string, error) {
-	resBody, _, _, err := baseReq("/view/" + viewName + "/api/json")
+func GetViewJob(viewName string) ([]string, error) {
+	resBody, _, _, err := baseReq("/view/"+viewName+"/api/json", make(map[string]string))
 	if err != nil {
 		return nil, err
 	}
@@ -85,8 +97,8 @@ func GetViewJob(username string, token string, baseApi string, viewName string) 
 	return jobRes, nil
 }
 
-func GetJobPararm(jobName string) ([]string, []string, error) {
-	resBody, _, _, err := baseReq("/job/" + jobName + "/api/json")
+func GetJobPararms(jobName string) ([]string, []string, error) {
+	resBody, _, _, err := baseReq("/job/"+jobName+"/api/json", make(map[string]string))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -97,16 +109,16 @@ func GetJobPararm(jobName string) ([]string, []string, error) {
 		choicesArray = append(choicesArray, item.String())
 	}
 
-	branchs := gjson.Get(parameterDefinitions.Raw, "#(_class==\"net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition\").allValueItems.values.#.value")
+	branches := gjson.Get(parameterDefinitions.Raw, "#(_class==\"net.uaznia.lukanus.hudson.plugins.gitparameter.GitParameterDefinition\").allValueItems.values.#.value")
 	branchArray := make([]string, 0)
-	for _, item := range branchs.Array() {
+	for _, item := range branches.Array() {
 		branchArray = append(branchArray, item.String())
 	}
 	return choicesArray, branchArray, nil
 }
 
 func GetCrumb() (string, string, error) {
-	resBody, _, _, err := baseReq("/crumbIssuer/api/json")
+	resBody, _, _, err := baseReq("/crumbIssuer/api/json", make(map[string]string))
 	if err != nil {
 		return "", "", err
 	}
@@ -164,7 +176,7 @@ func BuildWithParameters(jobName string, choices string, branch string) (string,
 }
 
 func GetBuildNumber(queueId string) (string, error) {
-	resBody, _, _, err := baseReq("/queue/item/" + queueId + "/api/json")
+	resBody, _, _, err := baseReq("/queue/item/"+queueId+"/api/json", make(map[string]string))
 	if err != nil {
 		return "", err
 	}
@@ -172,7 +184,7 @@ func GetBuildNumber(queueId string) (string, error) {
 }
 
 func GetBuildLog(jobName string, buildNumber string) (string, error) {
-	resBody, _, _, err := baseReq("/job/" + jobName + "/" + buildNumber + "/logText/progressiveText/api/json")
+	resBody, _, _, err := baseReq("/job/"+jobName+"/"+buildNumber+"/logText/progressiveText/api/json", make(map[string]string))
 	if err != nil {
 		return "", err
 	}
@@ -181,7 +193,7 @@ func GetBuildLog(jobName string, buildNumber string) (string, error) {
 }
 
 func GetQueue() ([]config.Queue, error) {
-	resBody, _, _, err := baseReq("/queue/api/json")
+	resBody, _, _, err := baseReq("/queue/api/json", make(map[string]string))
 	if err != nil {
 		return nil, err
 	}
@@ -203,7 +215,7 @@ func GetQueue() ([]config.Queue, error) {
 }
 
 func GetComputer() ([]config.Computer, error) {
-	resBody, _, _, err := baseReq("/computer/api/json?depth=1")
+	resBody, _, _, err := baseReq("/computer/api/json", map[string]string{"depth": "1"})
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +244,7 @@ func GetComputer() ([]config.Computer, error) {
 }
 
 func GetBuildStatus(jobName string, buildNumber string) (config.BuildInfo, error) {
-	resBody, _, _, err := baseReq("/job/" + jobName + "/" + buildNumber + "/api/json")
+	resBody, _, _, err := baseReq("/job/"+jobName+"/"+buildNumber+"/api/json", make(map[string]string))
 	if err != nil {
 		return config.BuildInfo{}, err
 	}
@@ -248,11 +260,14 @@ func GetBuildStatus(jobName string, buildNumber string) (config.BuildInfo, error
 	changeSets := make([]config.ChangeSet, 0)
 	for _, changeSetItem := range res[5].Array() {
 		changeSetItem.Get("items").ForEach(func(_, item gjson.Result) bool {
+			// 将提交信息中的换行符替换为空格
+			comment := strings.ReplaceAll(item.Get("comment").String(), "\n", " ")
+			comment = strings.ReplaceAll(comment, "\r", "")
 			changeSet := config.ChangeSet{
 				CommitId:       item.Get("commitId").String(),
 				Timestamp:      item.Get("timestamp").String(),
 				AuthorFullName: item.Get("author.fullName").String(),
-				Comment:        item.Get("comment").String(),
+				Comment:        strings.TrimSpace(comment),
 			}
 			changeSets = append(changeSets, changeSet)
 			return true
@@ -263,16 +278,23 @@ func GetBuildStatus(jobName string, buildNumber string) (config.BuildInfo, error
 }
 
 func GetTextLog(jobName string, buildNumber string, start *int) (string, bool, int, error) {
-	reqUrl := "/job/" + jobName + "/" + buildNumber + "/logText/progressiveText"
+	reqUrl := "/job/" + url.PathEscape(jobName) + "/" + url.PathEscape(buildNumber) + "/logText/progressiveText"
 	if start != nil {
-		reqUrl = reqUrl + "?start=" + strconv.Itoa(*start)
+		u, err := url.Parse(reqUrl)
+		if err != nil {
+			return "", false, -1, fmt.Errorf("failed to parse URL: %w", err)
+		}
+		q := u.Query()
+		q.Set("start", strconv.Itoa(*start))
+		u.RawQuery = q.Encode()
+		reqUrl = u.String()
 	}
-	resBody, _, resHeader, err := baseReq(reqUrl)
+	resBody, _, resHeader, err := baseReq(reqUrl, make(map[string]string))
 	if err != nil {
 		return "", false, -1, err
 	}
 	logText := string(resBody)
-	moreDate := false
+	moreData := false
 	textSize := int(-1)
 	if resHeader != nil {
 		moreDateTemp := resHeader.Get("X-More-Data")
@@ -280,7 +302,7 @@ func GetTextLog(jobName string, buildNumber string, start *int) (string, bool, i
 		if moreDateTemp != "" {
 			parsed, err := strconv.ParseBool(moreDateTemp)
 			if err == nil {
-				moreDate = parsed
+				moreData = parsed
 			}
 		}
 		if textSizetemp != "" {
@@ -290,11 +312,11 @@ func GetTextLog(jobName string, buildNumber string, start *int) (string, bool, i
 			}
 		}
 	}
-	return logText, moreDate, textSize, nil
+	return logText, moreData, textSize, nil
 }
 
 func GetPipelineConfig(jobName string) (config.PipelineConfig, error) {
-	resBody, _, _, err := baseReq("/job/" + jobName + "/wfapi/runs")
+	resBody, _, _, err := baseReq("/job/"+jobName+"/wfapi/runs", make(map[string]string))
 	if err != nil {
 		return config.PipelineConfig{}, err
 	}
@@ -323,7 +345,7 @@ func GetPipelineConfig(jobName string) (config.PipelineConfig, error) {
 }
 
 func GetWFDescribe(jobName string, buildNumber string) (config.WFDescribe, error) {
-	resBody, _, _, err := baseReq("/job/" + jobName + "/" + buildNumber + "/wfapi/describe")
+	resBody, _, _, err := baseReq("/job/"+jobName+"/"+buildNumber+"/wfapi/describe", make(map[string]string))
 	if err != nil {
 		return config.WFDescribe{}, err
 	}
@@ -377,11 +399,11 @@ func Stop(jobName string, buildNumber string) (bool, error) {
 	return false, fmt.Errorf("stop request failed with status code: %d", response.StatusCode)
 }
 
-func CancleItem(queueId string) (bool, error) {
+func CancelItem(queueId string) (bool, error) {
 	if queueId == "" {
 		return false, fmt.Errorf("queue ID cannot be empty")
 	}
-	_, statusCode, _, err := baseReq("/queue/cancelItem?id=" + queueId)
+	_, statusCode, _, err := baseReq("/queue/cancelItem?id="+queueId, make(map[string]string))
 	if err != nil {
 		return false, err
 	}

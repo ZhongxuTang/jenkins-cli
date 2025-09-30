@@ -1,6 +1,10 @@
 package util
 
 import (
+	"fmt"
+	"os"
+	"strings"
+
 	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/config"
 	"github.com/manifoldco/promptui"
@@ -55,7 +59,7 @@ func StrUISelect(label string, itemStrs []string) string {
 	}
 
 	template := &promptui.SelectTemplates{
-		Label:    "{{ . }}?",
+		Label:    "{{ . }}? (Press Ctrl+C or 'q' to quit)",
 		Active:   "\U0001F34B {{ .Name | cyan }}",
 		Inactive: "  {{ .Name | cyan }}",
 		Selected: "\u2714 {{ .Name | cyan }}",
@@ -64,16 +68,46 @@ func StrUISelect(label string, itemStrs []string) string {
 {{ "Name:" | faint }}	{{ .Name }}`,
 	}
 
+	searcher := func(input string, index int) bool {
+		item := items[index]
+		name := item.Name
+
+		// Handle 'q' to quit
+		if input == "q" || input == "Q" {
+			fmt.Println()
+			color.Yellow("👋 Exiting...")
+			os.Exit(0)
+		}
+
+		// Default search behavior - case insensitive substring match
+		if input == "" {
+			return true
+		}
+		return contains(name, input)
+	}
+
 	selectPrompt := &promptui.Select{
 		Label:     label,
 		Items:     items,
 		Templates: template,
 		Size:      10,
+		Searcher:  searcher,
 	}
 	index, _, err := selectPrompt.Run()
 	if err != nil {
+		if err.Error() == "^C" || err.Error() == "interrupt" {
+			fmt.Println()
+			color.Yellow("👋 Exiting...")
+			os.Exit(0)
+		}
 		color.Yellow("failed to select")
 		return ""
 	}
+
 	return itemStrs[index]
+}
+
+// contains checks if a string contains a substring (case insensitive)
+func contains(str, substr string) bool {
+	return strings.Contains(strings.ToLower(str), strings.ToLower(substr))
 }

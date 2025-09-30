@@ -14,7 +14,7 @@ import (
 
 var stagesCmd = &cobra.Command{
 	Use:   "stages",
-	Short: "stages",
+	Short: "stages <jobName> <buildNumber>",
 	Long:  `task stages`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {

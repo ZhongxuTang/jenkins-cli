@@ -36,35 +36,35 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
-		choices, branchs, err := api.GetJobPararm(selectJob)
+		choices, branches, err := api.GetJobPararms(selectJob)
 		if err != nil {
 			color.Red("❌ Error getting job parameters: %v", err)
 			return
 		}
 
 		choicesSelect := util.StrUISelect("Select Choices", choices)
-		branchsSelect := util.StrUISelect("Select Branch", branchs)
+		branchSelect := util.StrUISelect("Select Branch", branches)
 
-		if selectView == "" || selectJob == "" || branchsSelect == "" {
+		if selectView == "" || selectJob == "" || branchSelect == "" {
 			color.Red("🚨 Selection incomplete, please try again.")
 			return
 		}
 
-		queueId, err := api.BuildWithParameters(selectJob, choicesSelect, branchsSelect)
+		queueId, err := api.BuildWithParameters(selectJob, choicesSelect, branchSelect)
 		if err != nil {
 			color.Red("❌ Error starting build: %v", err)
 			return
 		}
 
 		if queueId != "" {
-			color.Cyan("🎉 Build " + selectJob + choicesSelect + branchsSelect + " success, queue id is " + queueId)
+			color.Cyan("🎉 Build " + selectJob + choicesSelect + branchSelect + " success, queue id is " + queueId)
 		}
 		waitOperation(4)
-		buildNumber := getBudilNumber(queueId, 8)
+		buildNumber := getBuildNumber(queueId, 8)
 		if buildNumber == "" {
 			color.Yellow("♻️ job maybe waiting to run, please check it later")
 		} else {
-			color.Cyan("🍻 Build " + selectJob + " " + choicesSelect + " " + branchsSelect + " success, build number is " + buildNumber)
+			color.Cyan("🍻 Build " + selectJob + " " + choicesSelect + " " + branchSelect + " success, build number is " + buildNumber)
 		}
 		buildInfo, err := api.GetBuildStatus(selectJob, buildNumber)
 		if err != nil {
@@ -73,7 +73,7 @@ var rootCmd = &cobra.Command{
 		}
 		if len(buildInfo.ChangeSets) > 0 {
 			for index, item := range buildInfo.ChangeSets {
-				color.Cyan(strconv.Itoa(index+1) + "、 " + item.Comment + " by " + item.AuthorFullName)
+				color.Cyan(strconv.Itoa(index+1) + "、" + item.Comment + " by " + item.AuthorFullName)
 			}
 		} else {
 			color.Yellow("⚠️ No change sets")
@@ -86,7 +86,6 @@ func selectView(cfg config.Workspace) string {
 	for _, item := range cfg.Views {
 		viewNames = append(viewNames, item.Name)
 	}
-	//viewNames = append(viewNames, "return")
 	return util.StrUISelect("Select View", viewNames)
 }
 
@@ -120,7 +119,7 @@ func waitOperation(second time.Duration) {
 	s.Stop()
 }
 
-func getBudilNumber(queueId string, size int) string {
+func getBuildNumber(queueId string, size int) string {
 	if size <= 0 {
 		return ""
 	}
@@ -134,5 +133,5 @@ func getBudilNumber(queueId string, size int) string {
 	}
 	size = size - 1
 	waitOperation(3)
-	return getBudilNumber(queueId, size)
+	return getBuildNumber(queueId, size)
 }

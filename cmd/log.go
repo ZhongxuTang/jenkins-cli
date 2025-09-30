@@ -11,7 +11,7 @@ import (
 
 var logCmd = &cobra.Command{
 	Use:   "log",
-	Short: "log",
+	Short: "log <jobName> <buildNumber>",
 	Long:  `task log`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
@@ -19,24 +19,24 @@ var logCmd = &cobra.Command{
 			return
 		}
 		var logText string
-		var moreDate bool
+		var moreData bool
 		var textSize int
 		var err error
 
-		logText, moreDate, textSize, err = api.GetTextLog(args[0], args[1], nil)
+		logText, moreData, textSize, err = api.GetTextLog(args[0], args[1], nil)
 		if err != nil {
 			color.Red("❌ Error getting log: %v", err)
 			return
 		}
 
-		if textSize == -1 || !moreDate {
+		if textSize == -1 || !moreData {
 			// log complete
 			printLogLine(logText, 20*time.Millisecond)
 			color.White("Log output is completed!")
 		} else {
 			printLogLine(logText, 20*time.Millisecond)
-			for moreDate {
-				logText, moreDate, textSize, err = api.GetTextLog(args[0], args[1], &textSize)
+			for moreData {
+				logText, moreData, textSize, err = api.GetTextLog(args[0], args[1], &textSize)
 				if err != nil {
 					color.Red("❌ Error getting more log data: %v", err)
 					break

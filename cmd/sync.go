@@ -16,12 +16,6 @@ var syncCmd = &cobra.Command{
 	Short: "sync config",
 	Long:  `sync jenkins data to config file`,
 	Run: func(cmd *cobra.Command, args []string) {
-		baseConfig, err := util.GetConfigFile()
-		if err != nil {
-			color.Red("❌ Error loading base configuration: %v", err)
-			return
-		}
-
 		cfg, err := util.GetWorkspaceFile()
 		if err != nil {
 			// If workspace file doesn't exist, create empty workspace
@@ -43,7 +37,7 @@ var syncCmd = &cobra.Command{
 			view.Name = viewName
 			view.Job = make([]config.Job, 0)
 
-			jobNames, err := api.GetViewJob(baseConfig.Username, baseConfig.Token, baseConfig.BaseApi, viewName)
+			jobNames, err := api.GetViewJob(viewName)
 			if err != nil {
 				color.Yellow("⚠️ Error getting jobs for view %s: %v", viewName, err)
 				continue
