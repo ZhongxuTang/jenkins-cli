@@ -9,6 +9,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/api"
 	"github.com/lemonsoul/jenkins-cli/config"
+	"github.com/lemonsoul/jenkins-cli/util"
 	"github.com/spf13/cobra"
 )
 
@@ -21,9 +22,14 @@ var stagesCmd = &cobra.Command{
 			color.White("Please provide the job name and build number as arguments.")
 			return
 		}
+		account, err := util.PickAccount("")
+		if err != nil {
+			color.Red("❌ Error loading account configuration: %v", err)
+			return
+		}
 		//color.White("Fetching stages for job:", args[0], "and build number:", args[1])
 		//pipelineInfo := api.GetPipelineConfig(args[0])
-		wFDescribe, err := api.GetWFDescribe(args[0], args[1])
+		wFDescribe, err := api.GetWFDescribe(account, args[0], args[1])
 		if err != nil {
 			color.Red("❌ Error getting workflow description: %v", err)
 			return
@@ -47,7 +53,7 @@ var stagesCmd = &cobra.Command{
 		}
 
 		// build stages progress bar
-		pipelineInfo, _ := api.GetPipelineConfig(args[0])
+		pipelineInfo, _ := api.GetPipelineConfig(account, args[0])
 
 		complate := false
 		for index, stage := range pipelineInfo.Stages {
@@ -58,7 +64,7 @@ var stagesCmd = &cobra.Command{
 		Loop:
 			for {
 				if !complate {
-					wFDescribe, _ = api.GetWFDescribe(args[0], args[1])
+					wFDescribe, _ = api.GetWFDescribe(account, args[0], args[1])
 				}
 				if complate || strings.Compare(wFDescribe.Status, "SUCCESS") == 0 {
 					complate = true

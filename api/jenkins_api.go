@@ -14,27 +14,17 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/config"
-	"github.com/lemonsoul/jenkins-cli/util"
 	"github.com/tidwall/gjson"
 )
 
-func buildRequest(req *http.Request) error {
-	cfg, err := util.GetConfigFile()
-	if err != nil {
-		return err
-	}
+func buildRequest(cfg config.JenkinsConfig, req *http.Request) error {
 	auth := cfg.Username + ":" + cfg.Token
 	encodedAuth := base64.StdEncoding.EncodeToString([]byte(auth))
 	req.Header.Add("Authorization", "Basic "+encodedAuth)
 	return nil
 }
 
-func baseReq(api string, params map[string]string) ([]byte, int, http.Header, error) {
-	cfg, err := util.GetConfigFile()
-	if err != nil {
-		return nil, -1, nil, err
-	}
-
+func baseReq(cfg config.JenkinsConfig, api string, params map[string]string) ([]byte, int, http.Header, error) {
 	apiUrl, _ := url.JoinPath(cfg.BaseApi, api)
 
 	urlParams := url.Values{}
@@ -52,27 +42,29 @@ func baseReq(api string, params map[string]string) ([]byte, int, http.Header, er
 		return nil, -1, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if err := buildRequest(req); err != nil {
+	if err := buildRequest(cfg, req); err != nil {
 		return nil, -1, nil, err
 	}
-
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
 		color.Red("request failed: %v", err)
 		return nil, -1, nil, fmt.Errorf("request failed: %w", err)
 	}
+	defer response.Body.Close()
 
 	resBody, ioErr := io.ReadAll(response.Body)
 	if ioErr != nil {
 		color.Red("io error: %v", ioErr)
 		return nil, response.StatusCode, response.Header, fmt.Errorf("failed to read response: %w", ioErr)
 	}
-
+	if response.StatusCode >= 400 {
+		return resBody, response.StatusCode, response.Header, fmt.Errorf("request failed with status code: %d", response.StatusCode)
+	}
 	return resBody, response.StatusCode, response.Header, nil
 }
 
-func GetViews() ([]string, error) {
-	resBody, _, _, err := baseReq("/api/json", make(map[string]string))
+func GetViews(cfg config.JenkinsConfig) ([]string, error) {
+	resBody, _, _, err := baseReq(cfg, "/api/json", make(map[string]string))
 	if err != nil {
 		return nil, err
 	}
@@ -84,8 +76,8 @@ func GetViews() ([]string, error) {
 	return viewRes, nil
 }
 
-func GetViewJob(viewName string) ([]string, error) {
-	resBody, _, _, err := baseReq("/view/"+viewName+"/api/json", make(map[string]string))
+func GetViewJob(cfg config.JenkinsConfig, viewName string) ([]string, error) {
+	resBody, _, _, err := baseReq(cfg, "/view/"+viewName+"/api/json", make(map[string]string))
 	if err != nil {
 		return nil, err
 	}
@@ -97,8 +89,8 @@ func GetViewJob(viewName string) ([]string, error) {
 	return jobRes, nil
 }
 
-func GetJobPararms(jobName string) ([]string, []string, error) {
-	resBody, _, _, err := baseReq("/job/"+jobName+"/api/json", make(map[string]string))
+func GetJobParams(cfg config.JenkinsConfig, jobName string) ([]string, []string, error) {
+	resBody, _, _, err := baseReq(cfg, "/job/"+jobName+"/api/json", make(map[string]string))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -117,8 +109,8 @@ func GetJobPararms(jobName string) ([]string, []string, error) {
 	return choicesArray, branchArray, nil
 }
 
-func GetCrumb() (string, string, error) {
-	resBody, _, _, err := baseReq("/crumbIssuer/api/json", make(map[string]string))
+func GetCrumb(cfg config.JenkinsConfig) (string, string, error) {
+	resBody, _, _, err := baseReq(cfg, "/crumbIssuer/api/json", make(map[string]string))
 	if err != nil {
 		return "", "", err
 	}
@@ -126,8 +118,8 @@ func GetCrumb() (string, string, error) {
 	return resutArray[0].String(), resutArray[1].String(), nil
 }
 
-func BuildWithParameters(jobName string, choices string, branch string) (string, error) {
-	crumbRequestField, crumb, err := GetCrumb()
+func BuildWithParameters(cfg config.JenkinsConfig, jobName string, choices string, branch string) (string, error) {
+	crumbRequestField, crumb, err := GetCrumb(cfg)
 	if err != nil {
 		return "", fmt.Errorf("failed to get crumb: %w", err)
 	}
@@ -139,11 +131,6 @@ func BuildWithParameters(jobName string, choices string, branch string) (string,
 	data.Set("tag", branch)
 	data.Set("pro", choices)
 	encodedData := data.Encode()
-
-	cfg, err := util.GetConfigFile()
-	if err != nil {
-		return "", err
-	}
 
 	req, err := http.NewRequest("POST", cfg.BaseApi+"/job/"+jobName+"/buildWithParameters", strings.NewReader(encodedData))
 	if err != nil {
@@ -175,16 +162,16 @@ func BuildWithParameters(jobName string, choices string, branch string) (string,
 	}
 }
 
-func GetBuildNumber(queueId string) (string, error) {
-	resBody, _, _, err := baseReq("/queue/item/"+queueId+"/api/json", make(map[string]string))
+func GetBuildNumber(cfg config.JenkinsConfig, queueId string) (string, error) {
+	resBody, _, _, err := baseReq(cfg, "/queue/item/"+queueId+"/api/json", make(map[string]string))
 	if err != nil {
 		return "", err
 	}
 	return gjson.Get(string(resBody), "executable.number").String(), nil
 }
 
-func GetBuildLog(jobName string, buildNumber string) (string, error) {
-	resBody, _, _, err := baseReq("/job/"+jobName+"/"+buildNumber+"/logText/progressiveText/api/json", make(map[string]string))
+func GetBuildLog(cfg config.JenkinsConfig, jobName string, buildNumber string) (string, error) {
+	resBody, _, _, err := baseReq(cfg, "/job/"+jobName+"/"+buildNumber+"/logText/progressiveText/api/json", make(map[string]string))
 	if err != nil {
 		return "", err
 	}
@@ -192,8 +179,8 @@ func GetBuildLog(jobName string, buildNumber string) (string, error) {
 	return log, nil
 }
 
-func GetQueue() ([]config.Queue, error) {
-	resBody, _, _, err := baseReq("/queue/api/json", make(map[string]string))
+func GetQueue(cfg config.JenkinsConfig) ([]config.Queue, error) {
+	resBody, _, _, err := baseReq(cfg, "/queue/api/json", make(map[string]string))
 	if err != nil {
 		return nil, err
 	}
@@ -214,8 +201,8 @@ func GetQueue() ([]config.Queue, error) {
 	return queueArray, nil
 }
 
-func GetComputer() ([]config.Computer, error) {
-	resBody, _, _, err := baseReq("/computer/api/json", map[string]string{"depth": "1"})
+func GetComputer(cfg config.JenkinsConfig) ([]config.Computer, error) {
+	resBody, _, _, err := baseReq(cfg, "/computer/api/json", map[string]string{"depth": "1"})
 	if err != nil {
 		return nil, err
 	}
@@ -243,8 +230,8 @@ func GetComputer() ([]config.Computer, error) {
 	return computerArray, nil
 }
 
-func GetBuildStatus(jobName string, buildNumber string) (config.BuildInfo, error) {
-	resBody, _, _, err := baseReq("/job/"+jobName+"/"+buildNumber+"/api/json", make(map[string]string))
+func GetBuildStatus(cfg config.JenkinsConfig, jobName string, buildNumber string) (config.BuildInfo, error) {
+	resBody, _, _, err := baseReq(cfg, "/job/"+jobName+"/"+buildNumber+"/api/json", make(map[string]string))
 	if err != nil {
 		return config.BuildInfo{}, err
 	}
@@ -277,7 +264,7 @@ func GetBuildStatus(jobName string, buildNumber string) (config.BuildInfo, error
 	return buildStatus, nil
 }
 
-func GetTextLog(jobName string, buildNumber string, start *int) (string, bool, int, error) {
+func GetTextLog(cfg config.JenkinsConfig, jobName string, buildNumber string, start *int) (string, bool, int, error) {
 	reqUrl := "/job/" + url.PathEscape(jobName) + "/" + url.PathEscape(buildNumber) + "/logText/progressiveText"
 	if start != nil {
 		u, err := url.Parse(reqUrl)
@@ -289,7 +276,7 @@ func GetTextLog(jobName string, buildNumber string, start *int) (string, bool, i
 		u.RawQuery = q.Encode()
 		reqUrl = u.String()
 	}
-	resBody, _, resHeader, err := baseReq(reqUrl, make(map[string]string))
+	resBody, _, resHeader, err := baseReq(cfg, reqUrl, make(map[string]string))
 	if err != nil {
 		return "", false, -1, err
 	}
@@ -315,8 +302,8 @@ func GetTextLog(jobName string, buildNumber string, start *int) (string, bool, i
 	return logText, moreData, textSize, nil
 }
 
-func GetPipelineConfig(jobName string) (config.PipelineConfig, error) {
-	resBody, _, _, err := baseReq("/job/"+jobName+"/wfapi/runs", make(map[string]string))
+func GetPipelineConfig(cfg config.JenkinsConfig, jobName string) (config.PipelineConfig, error) {
+	resBody, _, _, err := baseReq(cfg, "/job/"+jobName+"/wfapi/runs", make(map[string]string))
 	if err != nil {
 		return config.PipelineConfig{}, err
 	}
@@ -344,8 +331,8 @@ func GetPipelineConfig(jobName string) (config.PipelineConfig, error) {
 	}, nil
 }
 
-func GetWFDescribe(jobName string, buildNumber string) (config.WFDescribe, error) {
-	resBody, _, _, err := baseReq("/job/"+jobName+"/"+buildNumber+"/wfapi/describe", make(map[string]string))
+func GetWFDescribe(cfg config.JenkinsConfig, jobName string, buildNumber string) (config.WFDescribe, error) {
+	resBody, _, _, err := baseReq(cfg, "/job/"+jobName+"/"+buildNumber+"/wfapi/describe", make(map[string]string))
 	if err != nil {
 		return config.WFDescribe{}, err
 	}
@@ -371,22 +358,25 @@ func GetWFDescribe(jobName string, buildNumber string) (config.WFDescribe, error
 	}, nil
 }
 
-func Stop(jobName string, buildNumber string) (bool, error) {
-	cfg, err := util.GetConfigFile()
-	if err != nil {
-		return false, err
-	}
-
+func Stop(cfg config.JenkinsConfig, jobName string, buildNumber string) (bool, error) {
 	req, err := http.NewRequest("POST", cfg.BaseApi+"/job/"+jobName+"/"+buildNumber+"/stop", nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	if err := buildRequest(req); err != nil {
+	if err := buildRequest(cfg, req); err != nil {
 		return false, err
 	}
 
-	response, err := http.DefaultClient.Do(req)
+	client := &http.Client{
+		// Jenkins stop commonly returns 302 after accepting the request.
+		// Keep the first response instead of following a relative redirect.
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	response, err := client.Do(req)
 	if err != nil {
 		color.Red("request failed: %v", err)
 		return false, fmt.Errorf("request failed: %w", err)
@@ -399,11 +389,11 @@ func Stop(jobName string, buildNumber string) (bool, error) {
 	return false, fmt.Errorf("stop request failed with status code: %d", response.StatusCode)
 }
 
-func CancelItem(queueId string) (bool, error) {
+func CancelItem(cfg config.JenkinsConfig, queueId string) (bool, error) {
 	if queueId == "" {
 		return false, fmt.Errorf("queue ID cannot be empty")
 	}
-	_, statusCode, _, err := baseReq("/queue/cancelItem?id="+queueId, make(map[string]string))
+	_, statusCode, _, err := baseReq(cfg, "/queue/cancelItem?id="+queueId, make(map[string]string))
 	if err != nil {
 		return false, err
 	}
