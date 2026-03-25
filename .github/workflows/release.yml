@@ -35,7 +35,13 @@ jobs:
         id: main
         run: |
           git fetch origin main --depth=1
-          if git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+          tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
+          if [ -z "$tag_commit" ]; then
+            echo "value=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$tag_commit" "origin/main"; then
             echo "value=true" >> "$GITHUB_OUTPUT"
           else
             echo "value=false" >> "$GITHUB_OUTPUT"
