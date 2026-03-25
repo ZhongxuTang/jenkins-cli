@@ -34,17 +34,46 @@ jobs:
       - name: Check tag commit is on main
         id: main
         run: |
-          git fetch origin main --depth=1
           tag_commit="$(git rev-list -n 1 "$GITHUB_REF_NAME")"
           if [ -z "$tag_commit" ]; then
             echo "value=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          if git merge-base --is-ancestor "$tag_commit" "origin/main"; then
+          main_ref=""
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            main_ref="refs/remotes/origin/main"
+          elif git show-ref --verify --quiet refs/heads/main; then
+            main_ref="refs/heads/main"
+          fi
+
+          if [ -z "$main_ref" ]; then
+            echo "value=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if git merge-base --is-ancestor "$tag_commit" "$main_ref"; then
             echo "value=true" >> "$GITHUB_OUTPUT"
           else
             echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Debug prepare outputs
+        run: |
+          echo "GITHUB_REF=$GITHUB_REF"
+          echo "GITHUB_REF_NAME=$GITHUB_REF_NAME"
+          echo "GITHUB_SHA=$GITHUB_SHA"
+          echo "version=${{ steps.version.outputs.value }}"
+          echo "on_main=${{ steps.main.outputs.value }}"
+          echo "tag_commit=$(git rev-list -n 1 "$GITHUB_REF_NAME" || true)"
+          if git show-ref --verify --quiet refs/remotes/origin/main; then
+            echo "main_ref=refs/remotes/origin/main"
+            echo "main_sha=$(git rev-parse refs/remotes/origin/main)"
+          elif git show-ref --verify --quiet refs/heads/main; then
+            echo "main_ref=refs/heads/main"
+            echo "main_sha=$(git rev-parse refs/heads/main)"
+          else
+            echo "main_ref="
           fi
 
   build:
