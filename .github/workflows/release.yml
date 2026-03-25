@@ -2,15 +2,35 @@ name: Release Binaries
 
 on:
   push:
-    tags:
-      - '*.*.*'
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
+  prepare:
+    name: Resolve release version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.value }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve version
+        id: version
+        run: |
+          version="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' | head -n 1 || true)"
+          echo "value=$version" >> "$GITHUB_OUTPUT"
+
   build:
     name: Build ${{ matrix.goos }} / ${{ matrix.goarch }}
+    needs: prepare
+    if: ${{ needs.prepare.outputs.version != '' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -24,6 +44,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -35,7 +57,7 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          VERSION: ${{ github.ref_name }}
+          VERSION: ${{ needs.prepare.outputs.version }}
           COMMIT: ${{ github.sha }}
         run: |
           ext=""
@@ -58,10 +80,17 @@ jobs:
   release:
     name: Publish release
     runs-on: ubuntu-latest
-    needs: build
-    if: ${{ !github.event.act }}
+    needs:
+      - prepare
+      - build
+    if: ${{ !github.event.act && needs.prepare.outputs.version != '' }}
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -86,14 +115,32 @@ jobs:
             )
           done
 
+      - name: Generate release notes
+        run: |
+          current_tag="${{ needs.prepare.outputs.version }}"
+
+          previous_tag="$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+(\.[0-9]+)?$' | grep -Fxv "$current_tag" | head -n 1 || true)"
+
+          {
+            echo "## jenkins-cli ${current_tag}"
+            echo
+            echo "**Version:** ${current_tag}"
+            if [ -n "$previous_tag" ]; then
+              echo "**Changes Since:** ${previous_tag}"
+              echo
+              git log --no-merges --pretty='- %s (%h)' "${previous_tag}..${current_tag}"
+            else
+              echo
+              echo "Initial tagged release."
+              echo
+              git log --no-merges --pretty='- %s (%h)' "${current_tag}"
+            fi
+          } > release-notes.md
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*.zip
-          body: |
-            ## jenkins-cli ${{ github.ref_name }}
-
-            **Version:** ${{ github.ref_name }}
-            **Commit:** ${{ github.sha }}
+          body_path: release-notes.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
