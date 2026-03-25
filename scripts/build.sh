@@ -7,8 +7,9 @@ cd "$ROOT_DIR"
 BIN_DIR=${BIN_DIR:-"$ROOT_DIR/bin"}
 OUTPUT=${OUTPUT:-"$BIN_DIR/jcli"}
 GOMODCACHE_PATH=${GOMODCACHE_PATH:-"$ROOT_DIR/.gocache"}
+OUTPUT_DIR="$(dirname "$OUTPUT")"
 
-mkdir -p "$BIN_DIR" "$GOMODCACHE_PATH"
+mkdir -p "$OUTPUT_DIR" "$GOMODCACHE_PATH"
 
 VERSION=${VERSION:-$(git describe --tags --always 2>/dev/null || echo "dev")}
 COMMIT=${COMMIT:-$(git rev-parse --short HEAD 2>/dev/null || echo "none")}

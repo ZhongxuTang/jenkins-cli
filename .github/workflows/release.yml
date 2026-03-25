@@ -4,17 +4,22 @@ on:
   push:
     tags:
       - '*.*.*'
+
+permissions:
+  contents: write
+
 jobs:
   build:
-    name: Build binaries for ${{ matrix.goos }} / ${{ matrix.goarch }}
+    name: Build ${{ matrix.goos }} / ${{ matrix.goarch }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
         exclude:
           - goos: windows
-            goarch: arm64  # 跳过不常用组合
+            goarch: arm64
 
     steps:
       - name: Checkout code
@@ -23,25 +28,66 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.24.3'  # 根据你的项目选择 Go 版本
+          go-version-file: go.mod
+          cache: true
 
-      - name: Build binary
+      - name: Build archive
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           VERSION: ${{ github.ref_name }}
-          BIN_DIR: ${{ github.workspace }}/dist
+          COMMIT: ${{ github.sha }}
         run: |
-          mkdir -p dist
           ext=""
-          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          if [ "$GOOS" = "windows" ]; then
+            ext=".exe"
+          fi
 
-          OUTPUT="dist/jcli${ext}" ./scripts/build.sh
-          cd dist && zip "jcli-${GOOS}-${GOARCH}.zip" "jcli${ext}"
+          artifact="jcli-${GOOS}-${GOARCH}"
+          output="dist/${artifact}/jcli${ext}"
 
-      - name: Upload Release
+          BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" OUTPUT="$output" ./scripts/build.sh
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: jcli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/jcli-${{ matrix.goos }}-${{ matrix.goarch }}/
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ !github.event.act }}
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Package release archives
+        run: |
+          for dir in dist/*; do
+            [ -d "$dir" ] || continue
+
+            artifact="$(basename "$dir")"
+            binary="$(find "$dir" -maxdepth 1 -type f | head -n 1)"
+
+            if [ -z "$binary" ]; then
+              echo "No binary found in $dir" >&2
+              exit 1
+            fi
+
+            (
+              cd "$dir"
+              zip "../${artifact}.zip" "$(basename "$binary")"
+            )
+          done
+
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
           files: dist/*.zip
           body: |
@@ -49,9 +95,5 @@ jobs:
 
             **Version:** ${{ github.ref_name }}
             **Commit:** ${{ github.sha }}
-            **Build Date:** ${{ github.event.head_commit.timestamp }}
-
-            ### Downloads
-            Choose the appropriate binary for your platform below.
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_PAT }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

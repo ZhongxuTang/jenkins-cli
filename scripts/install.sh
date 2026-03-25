@@ -25,7 +25,7 @@ trap cleanup EXIT
 
 mkdir -p "$TMP_DIR" "$BINDIR"
 
-BIN_DIR="$TMP_DIR" OUTPUT="$TMP_DIR/jcli" GOMODCACHE_PATH="$GOMODCACHE_PATH" ./scripts/build.sh
+OUTPUT="$TMP_DIR/jcli" GOMODCACHE_PATH="$GOMODCACHE_PATH" ./scripts/build.sh
 
 if command -v install >/dev/null 2>&1; then
     install -m 0755 "$TMP_DIR/jcli" "$TARGET"
