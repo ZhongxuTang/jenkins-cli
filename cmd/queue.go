@@ -12,7 +12,13 @@ var queueCmd = &cobra.Command{
 	Short: "queue",
 	Long:  `task queue`,
 	Run: func(cmd *cobra.Command, args []string) {
-		queueArray, err := api.GetQueue()
+		account, err := util.PickAccount("")
+		if err != nil {
+			color.Red("❌ Error loading account configuration: %v", err)
+			return
+		}
+
+		queueArray, err := api.GetQueue(account)
 		if err != nil {
 			color.Red("❌ Error getting queue information: %v", err)
 			return
@@ -38,7 +44,7 @@ var queueCmd = &cobra.Command{
 			util.QueueUISelect("Queue", queueJobArray)
 		}
 
-		computerArray, err := api.GetComputer()
+		computerArray, err := api.GetComputer(account)
 		if err != nil {
 			color.Red("❌ Error getting computer information: %v", err)
 			return

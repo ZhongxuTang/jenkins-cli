@@ -6,37 +6,42 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/api"
+	"github.com/lemonsoul/jenkins-cli/util"
 	"github.com/spf13/cobra"
 )
 
 var logCmd = &cobra.Command{
 	Use:   "log",
-	Short: "log",
+	Short: "log <jobName> <buildNumber>",
 	Long:  `task log`,
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) < 2 {
 			color.White("Please provide the job name and build number as arguments.")
 			return
 		}
+		account, err := util.PickAccount("")
+		if err != nil {
+			color.Red("❌ Error loading account configuration: %v", err)
+			return
+		}
 		var logText string
-		var moreDate bool
+		var moreData bool
 		var textSize int
-		var err error
 
-		logText, moreDate, textSize, err = api.GetTextLog(args[0], args[1], nil)
+		logText, moreData, textSize, err = api.GetTextLog(account, args[0], args[1], nil)
 		if err != nil {
 			color.Red("❌ Error getting log: %v", err)
 			return
 		}
 
-		if textSize == -1 || !moreDate {
+		if textSize == -1 || !moreData {
 			// log complete
 			printLogLine(logText, 20*time.Millisecond)
 			color.White("Log output is completed!")
 		} else {
 			printLogLine(logText, 20*time.Millisecond)
-			for moreDate {
-				logText, moreDate, textSize, err = api.GetTextLog(args[0], args[1], &textSize)
+			for moreData {
+				logText, moreData, textSize, err = api.GetTextLog(account, args[0], args[1], &textSize)
 				if err != nil {
 					color.Red("❌ Error getting more log data: %v", err)
 					break
