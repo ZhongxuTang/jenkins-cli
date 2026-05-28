@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/lemonsoul/jenkins-cli/config"
 	"gopkg.in/yaml.v3"
@@ -20,7 +21,7 @@ func GetWorkspaceFilePathByName(accountName string) string {
 		return os.Getenv("HOME") + config.WORKSPACE_INFO_DIR
 	}
 	safeName := sanitizeAccountName(accountName)
-	return filepath.Join(os.Getenv("HOME"), ".config", config.BASE_NAME, config.WORKSPACE_INFO+"_"+safeName+".yaml")
+	return filepath.Join(os.Getenv("HOME"), ".config", config.BASE_NAME, config.WORKSPACE_INFO+"-"+safeName+".yaml")
 }
 
 func GetAccountByName(accountName string) (config.JenkinsConfig, error) {
@@ -335,17 +336,9 @@ func sanitizeAccountName(name string) string {
 		return config.DEFAULT_ACCOUNT_NAME
 	}
 	return strings.Map(func(r rune) rune {
-		switch {
-		case r >= 'a' && r <= 'z':
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.' {
 			return r
-		case r >= 'A' && r <= 'Z':
-			return r
-		case r >= '0' && r <= '9':
-			return r
-		case r == '-' || r == '_' || r == '.':
-			return r
-		default:
-			return '_'
 		}
+		return '_'
 	}, name)
 }

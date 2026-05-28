@@ -11,11 +11,25 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/config"
 	"github.com/tidwall/gjson"
 )
+
+var httpClient *http.Client
+
+func init() {
+	httpClient = &http.Client{
+		Timeout: 10 * time.Minute,
+	}
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		ct := t.Clone()
+		ct.MaxIdleConnsPerHost = 10
+		httpClient.Transport = ct
+	}
+}
 
 func buildRequest(cfg config.JenkinsConfig, req *http.Request) error {
 	auth := cfg.Username + ":" + cfg.Token
@@ -45,7 +59,7 @@ func baseReq(cfg config.JenkinsConfig, api string, params map[string]string) ([]
 	if err := buildRequest(cfg, req); err != nil {
 		return nil, -1, nil, err
 	}
-	response, err := http.DefaultClient.Do(req)
+	response, err := httpClient.Do(req)
 	if err != nil {
 		color.Red("request failed: %v", err)
 		return nil, -1, nil, fmt.Errorf("request failed: %w", err)
@@ -143,7 +157,7 @@ func BuildWithParameters(cfg config.JenkinsConfig, jobName string, choices strin
 	req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Add(crumbRequestField, crumb)
 
-	response, err := http.DefaultClient.Do(req)
+	response, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("failed to execute request: %w", err)
 	}
@@ -369,8 +383,8 @@ func Stop(cfg config.JenkinsConfig, jobName string, buildNumber string) (bool, e
 	}
 
 	client := &http.Client{
-		// Jenkins stop commonly returns 302 after accepting the request.
-		// Keep the first response instead of following a relative redirect.
+		Timeout:   10 * time.Minute,
+		Transport: httpClient.Transport,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			return http.ErrUseLastResponse
 		},

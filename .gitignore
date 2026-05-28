@@ -32,5 +32,6 @@ go.work.sum
 .vscode/
 .zed/
 .gocache/
+.claude/
 
 bin/

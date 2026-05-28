@@ -1,9 +1,13 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"time"
 
+	"github.com/briandowns/spinner"
 	"github.com/fatih/color"
 	"github.com/lemonsoul/jenkins-cli/api"
 	"github.com/lemonsoul/jenkins-cli/config"
@@ -51,49 +55,154 @@ var syncCmd = &cobra.Command{
 	},
 }
 
+type viewJobsResult struct {
+	jobNames []string
+	err      error
+}
+
+type paramResult struct {
+	choices  []string
+	branches []string
+	err      error
+}
+
+type jobRef struct {
+	viewIdx int
+	jobIdx  int
+	jobName string
+}
+
+const concurrency = 5
+
 func syncWorkspaceForAccount(account config.JenkinsConfig) error {
 	cfg, err := util.GetWorkspaceFile(account.Name)
 	if err != nil {
-		// If workspace file doesn't exist, create empty workspace
 		color.Yellow("⚠️ Workspace file not found, creating new one...")
 		cfg = config.Workspace{Views: make([]config.View, 0)}
 	}
 
+	// Phase 1: Get all view names
 	viewNames, err := api.GetViews(account)
 	if err != nil {
 		return err
 	}
 
-	// Reset views to get fresh data
 	oldCfg := cfg
 	cfg.Views = make([]config.View, 0)
 	cfg.RecentViews = util.FilterRecent(cfg.RecentViews, util.BuildAllowSet(viewNames), 3)
 
-	for _, viewName := range viewNames {
-		view := config.View{}
-		view.Name = viewName
-		view.Job = make([]config.Job, 0)
+	// Phase 2: Fetch view jobs concurrently with spinner
+	viewJobs := make([]viewJobsResult, len(viewNames))
+	sem := make(chan struct{}, concurrency)
+	var wg sync.WaitGroup
 
-		jobNames, err := api.GetViewJob(account, viewName)
-		if err != nil {
-			color.Yellow("⚠️ Error getting jobs for view %s: %v", viewName, err)
+	if len(viewNames) > 0 {
+		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+		s.Suffix = fmt.Sprintf(" Syncing views... [0/%d]", len(viewNames))
+		s.Start()
+
+		var completed int
+		var progressMu sync.Mutex
+
+		for i, viewName := range viewNames {
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(idx int, vn string) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				jobNames, err := api.GetViewJob(account, vn)
+				viewJobs[idx] = viewJobsResult{jobNames: jobNames, err: err}
+
+				progressMu.Lock()
+				completed++
+				s.Suffix = fmt.Sprintf(" Syncing views... [%d/%d]", completed, len(viewNames))
+				progressMu.Unlock()
+			}(i, viewName)
+		}
+		wg.Wait()
+		s.Stop()
+	}
+
+	for vi, vjr := range viewJobs {
+		if vjr.err != nil {
+			color.Yellow("⚠️ Error getting jobs for view %s: %v", viewNames[vi], vjr.err)
+		}
+	}
+
+	// Phase 3: Build flat job list and pre-allocate param storage
+	var allJobs []jobRef
+	jobParams := make([][]paramResult, len(viewNames))
+	for vi, vjr := range viewJobs {
+		if vjr.err != nil {
 			continue
 		}
-		view.RecentJobs = filterViewRecentJobs(oldCfg, viewName, jobNames)
+		jobParams[vi] = make([]paramResult, len(vjr.jobNames))
+		for ji, jobName := range vjr.jobNames {
+			allJobs = append(allJobs, jobRef{viewIdx: vi, jobIdx: ji, jobName: jobName})
+		}
+	}
 
-		for _, jobName := range jobNames {
+	totalJobs := len(allJobs)
+
+	// Phase 4: Fetch job params concurrently with spinner
+	if totalJobs > 0 {
+		s := spinner.New(spinner.CharSets[9], 100*time.Millisecond)
+		s.Suffix = fmt.Sprintf(" Syncing jobs... [0/%d]", totalJobs)
+		s.Start()
+
+		var completed int
+		var progressMu sync.Mutex
+
+		for _, ref := range allJobs {
+			sem <- struct{}{}
+			wg.Add(1)
+			go func(r jobRef) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				choices, branches, err := api.GetJobParams(account, r.jobName)
+				jobParams[r.viewIdx][r.jobIdx] = paramResult{choices: choices, branches: branches, err: err}
+
+				progressMu.Lock()
+				completed++
+				s.Suffix = fmt.Sprintf(" Syncing jobs... [%d/%d]", completed, totalJobs)
+				progressMu.Unlock()
+			}(ref)
+		}
+		wg.Wait()
+		s.Stop()
+
+		for _, ref := range allJobs {
+			pr := jobParams[ref.viewIdx][ref.jobIdx]
+			if pr.err != nil {
+				color.Yellow("⚠️ Error getting job params for %s: %v", ref.jobName, pr.err)
+			}
+		}
+	}
+
+	// Phase 5: Ordered assembly
+	for vi, vjr := range viewJobs {
+		if vjr.err != nil {
+			continue
+		}
+		view := config.View{}
+		view.Name = viewNames[vi]
+		view.Job = make([]config.Job, 0)
+		view.RecentJobs = filterViewRecentJobs(oldCfg, viewNames[vi], vjr.jobNames)
+
+		for ji, jobName := range vjr.jobNames {
+			pr := jobParams[vi][ji]
 			jobParam := config.JobParam{}
-			existingJob, ok := findJob(oldCfg, viewName, jobName)
-			choices, branches, err := api.GetJobParams(account, jobName)
-			if err != nil {
-				color.Yellow("⚠️ Error getting job params for %s: %v", jobName, err)
+			existingJob, ok := findJob(oldCfg, viewNames[vi], jobName)
+
+			if pr.err != nil {
 				if ok {
 					jobParam = existingJob.JobParam
 				}
 			} else {
-				jobParam.Choices = choices
-				jobParam.Branch = branches
+				jobParam.Choices = pr.choices
+				jobParam.Branch = pr.branches
 			}
+
 			job := config.Job{Name: jobName, JobParam: jobParam}
 			if ok {
 				choiceSet := util.BuildAllowSet(jobParam.Choices)
@@ -106,14 +215,13 @@ func syncWorkspaceForAccount(account config.JenkinsConfig) error {
 		cfg.Views = append(cfg.Views, view)
 	}
 
+	// Phase 6: Marshal and write YAML
 	data, err := yaml.Marshal(&cfg)
 	if err != nil {
 		return err
 	}
 
 	workspacePath := util.GetWorkspaceFilePathByName(account.Name)
-
-	// Write the updated config back to the file
 	err = os.WriteFile(workspacePath, data, 0644)
 	if err != nil {
 		return err
